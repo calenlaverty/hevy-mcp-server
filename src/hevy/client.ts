@@ -35,6 +35,10 @@ export class HevyClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
+    // Create abort controller for timeout (60 seconds for API requests)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+
     try {
       const response = await fetch(url, {
         ...options,
@@ -43,7 +47,10 @@ export class HevyClient {
           'Content-Type': 'application/json',
           ...options.headers,
         },
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -54,7 +61,12 @@ export class HevyClient {
 
       return response.json() as Promise<T>;
     } catch (error) {
+      clearTimeout(timeout);
+
       if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          throw new Error('Hevy API request timed out');
+        }
         throw error;
       }
       throw new Error(`Hevy API request failed: ${String(error)}`);
@@ -65,21 +77,26 @@ export class HevyClient {
 
   async getWorkouts(params: WorkoutQueryParams = {}): Promise<Workout[]> {
     const { page = 0, pageSize = 10, startDate, endDate } = params;
-    let endpoint = `/v1/workouts?page=${page}&pageSize=${pageSize}`;
+
+    const queryParams = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
 
     if (startDate) {
-      endpoint += `&startDate=${startDate}`;
+      queryParams.append('startDate', startDate);
     }
     if (endDate) {
-      endpoint += `&endDate=${endDate}`;
+      queryParams.append('endDate', endDate);
     }
 
+    const endpoint = `/v1/workouts?${queryParams.toString()}`;
     const response = await this.request<{ workouts: Workout[] }>(endpoint);
     return response.workouts || [];
   }
 
   async getWorkout(id: string): Promise<Workout> {
-    return this.request<Workout>(`/v1/workouts/${id}`);
+    return this.request<Workout>(`/v1/workouts/${encodeURIComponent(id)}`);
   }
 
   async createWorkout(data: CreateWorkoutInput): Promise<Workout> {
@@ -90,14 +107,14 @@ export class HevyClient {
   }
 
   async updateWorkout(id: string, data: UpdateWorkoutInput): Promise<Workout> {
-    return this.request<Workout>(`/v1/workouts/${id}`, {
+    return this.request<Workout>(`/v1/workouts/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteWorkout(id: string): Promise<void> {
-    await this.request(`/v1/workouts/${id}`, {
+    await this.request(`/v1/workouts/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   }
@@ -107,8 +124,9 @@ export class HevyClient {
   }
 
   async getWorkoutEvents(sinceDate: string): Promise<WorkoutEvent[]> {
+    const queryParams = new URLSearchParams({ since: sinceDate });
     const response = await this.request<{ events: WorkoutEvent[] }>(
-      `/v1/workouts/events?since=${sinceDate}`
+      `/v1/workouts/events?${queryParams.toString()}`
     );
     return response.events || [];
   }
@@ -117,14 +135,18 @@ export class HevyClient {
 
   async getRoutines(params: PaginationParams = {}): Promise<Routine[]> {
     const { page = 0, pageSize = 50 } = params;
+    const queryParams = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
     const response = await this.request<{ routines: Routine[] }>(
-      `/v1/routines?page=${page}&pageSize=${pageSize}`
+      `/v1/routines?${queryParams.toString()}`
     );
     return response.routines || [];
   }
 
   async getRoutine(id: string): Promise<Routine> {
-    return this.request<Routine>(`/v1/routines/${id}`);
+    return this.request<Routine>(`/v1/routines/${encodeURIComponent(id)}`);
   }
 
   async createRoutine(data: CreateRoutineInput): Promise<Routine> {
@@ -135,14 +157,14 @@ export class HevyClient {
   }
 
   async updateRoutine(id: string, data: UpdateRoutineInput): Promise<Routine> {
-    return this.request<Routine>(`/v1/routines/${id}`, {
+    return this.request<Routine>(`/v1/routines/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteRoutine(id: string): Promise<void> {
-    await this.request(`/v1/routines/${id}`, {
+    await this.request(`/v1/routines/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   }
@@ -151,34 +173,42 @@ export class HevyClient {
 
   async getExerciseTemplates(params: PaginationParams = {}): Promise<ExerciseTemplate[]> {
     const { page = 0, pageSize = 50 } = params;
+    const queryParams = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
     const response = await this.request<{ exercise_templates: ExerciseTemplate[] }>(
-      `/v1/exercise_templates?page=${page}&pageSize=${pageSize}`
+      `/v1/exercise_templates?${queryParams.toString()}`
     );
     return response.exercise_templates || [];
   }
 
   async getExerciseTemplate(id: string): Promise<ExerciseTemplate> {
-    return this.request<ExerciseTemplate>(`/v1/exercise_templates/${id}`);
+    return this.request<ExerciseTemplate>(`/v1/exercise_templates/${encodeURIComponent(id)}`);
   }
 
   async getExerciseProgress(params: ExerciseProgressParams): Promise<ExerciseProgress[]> {
     const { exercise_template_id, start_date, end_date, limit = 50 } = params;
-    let endpoint = `/v1/exercises/${exercise_template_id}/progress?limit=${limit}`;
+
+    const queryParams = new URLSearchParams({
+      limit: String(limit),
+    });
 
     if (start_date) {
-      endpoint += `&start_date=${start_date}`;
+      queryParams.append('start_date', start_date);
     }
     if (end_date) {
-      endpoint += `&end_date=${end_date}`;
+      queryParams.append('end_date', end_date);
     }
 
+    const endpoint = `/v1/exercises/${encodeURIComponent(exercise_template_id)}/progress?${queryParams.toString()}`;
     const response = await this.request<{ progress: ExerciseProgress[] }>(endpoint);
     return response.progress || [];
   }
 
   async getExerciseStats(exerciseTemplateId: string): Promise<ExerciseStats> {
     return this.request<ExerciseStats>(
-      `/v1/exercises/${exerciseTemplateId}/stats`
+      `/v1/exercises/${encodeURIComponent(exerciseTemplateId)}/stats`
     );
   }
 
@@ -192,7 +222,7 @@ export class HevyClient {
   }
 
   async getRoutineFolder(id: string): Promise<RoutineFolder> {
-    return this.request<RoutineFolder>(`/v1/routine_folders/${id}`);
+    return this.request<RoutineFolder>(`/v1/routine_folders/${encodeURIComponent(id)}`);
   }
 
   async createRoutineFolder(data: CreateFolderInput): Promise<RoutineFolder> {
@@ -203,14 +233,14 @@ export class HevyClient {
   }
 
   async updateRoutineFolder(id: string, data: CreateFolderInput): Promise<RoutineFolder> {
-    return this.request<RoutineFolder>(`/v1/routine_folders/${id}`, {
+    return this.request<RoutineFolder>(`/v1/routine_folders/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteRoutineFolder(id: string): Promise<void> {
-    await this.request(`/v1/routine_folders/${id}`, {
+    await this.request(`/v1/routine_folders/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   }

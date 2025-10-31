@@ -20,6 +20,13 @@ async function main() {
     const ssePath = process.env.SSE_PATH || '/mcp';
     const heartbeatInterval = parseInt(process.env.HEARTBEAT_INTERVAL || '30000', 10);
     const authToken = process.env.AUTH_TOKEN;
+    const sessionTimeout = parseInt(
+      process.env.SESSION_TIMEOUT || String(30 * 24 * 60 * 60 * 1000),
+      10
+    ); // 30 days default
+    const enableHttps = process.env.ENABLE_HTTPS === 'true';
+    const httpsKeyPath = process.env.HTTPS_KEY_PATH;
+    const httpsCertPath = process.env.HTTPS_CERT_PATH;
 
     // Validate required configuration
     if (!apiKey) {
@@ -51,6 +58,10 @@ async function main() {
         ssePath,
         heartbeatInterval,
         authToken,
+        sessionTimeout,
+        enableHttps,
+        httpsKeyPath,
+        httpsCertPath,
       });
     }
 

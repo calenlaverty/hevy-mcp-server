@@ -1,6 +1,13 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { createServer as createHttpsServer } from 'https';
+import { createServer as createHttpServer } from 'http';
+import { readFileSync } from 'fs';
+import { secureCompare, sanitizeErrorMessage } from '../utils/security.js';
+import { logger } from '../utils/logger.js';
 
 export interface SSETransportConfig {
   port: number;
@@ -8,7 +15,34 @@ export interface SSETransportConfig {
   ssePath: string;
   heartbeatInterval: number;
   authToken?: string;
+  sessionTimeout?: number; // in milliseconds, default 30 days
+  enableHttps?: boolean;
+  httpsKeyPath?: string;
+  httpsCertPath?: string;
 }
+
+interface Session {
+  id: string;
+  createdAt: number;
+  lastActivity: number;
+  ip?: string;
+}
+
+// Session storage (in-memory, could be Redis for production)
+const sessions = new Map<string, Session>();
+
+// Clean up expired sessions periodically
+setInterval(() => {
+  const now = Date.now();
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000; // default timeout
+
+  for (const [sessionId, session] of sessions.entries()) {
+    if (now - session.lastActivity > thirtyDays) {
+      sessions.delete(sessionId);
+      logger.sessionExpired(sessionId, 'inactivity');
+    }
+  }
+}, 60 * 60 * 1000); // Check every hour
 
 /**
  * Initialize SSE transport for Poke.com
@@ -19,9 +53,51 @@ export function createSSETransport(
   config: SSETransportConfig
 ): express.Application {
   const app = express();
+  const isProduction = process.env.NODE_ENV === 'production';
+  const sessionTimeout = config.sessionTimeout || 30 * 24 * 60 * 60 * 1000; // 30 days default
 
-  // Enable JSON body parsing
-  app.use(express.json());
+  // Security headers with Helmet
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:'],
+        },
+      },
+      hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+      },
+    })
+  );
+
+  // Enable JSON body parsing with size limits
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+  // Request timeout middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Set timeout for all requests (5 minutes for long-running AI operations)
+    req.setTimeout(5 * 60 * 1000);
+    res.setTimeout(5 * 60 * 1000);
+    next();
+  });
+
+  // Request logging middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const startTime = Date.now();
+
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      logger.apiRequest(req.method, req.path, res.statusCode, duration);
+    });
+
+    next();
+  });
 
   // CORS headers for remote access
   app.use((req, res, next) => {
@@ -36,7 +112,62 @@ export function createSSETransport(
     next();
   });
 
-  // Optional authentication middleware
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // Generous limit for AI agents (1000 requests per 15 min)
+    message: 'Too many requests from this IP, please try again later',
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+      logger.rateLimitExceeded(req.ip, req.path);
+      res.status(429).json({
+        error: 'Too many requests',
+        message: 'Please try again later',
+      });
+    },
+  });
+
+  // Apply rate limiting to all routes
+  app.use(limiter);
+
+  // Stricter rate limiting for authentication
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 50, // 50 auth attempts per 15 minutes
+    skipSuccessfulRequests: true,
+  });
+
+  // Session validation middleware
+  const validateSession = (req: Request, res: Response, next: NextFunction) => {
+    const sessionId = req.headers['mcp-session-id'] as string;
+
+    if (!sessionId) {
+      return next();
+    }
+
+    const session = sessions.get(sessionId);
+    if (!session) {
+      return next();
+    }
+
+    // Check if session expired
+    const now = Date.now();
+    if (now - session.lastActivity > sessionTimeout) {
+      sessions.delete(sessionId);
+      logger.sessionExpired(sessionId, 'timeout');
+      res.status(401).json({ error: 'Session expired' });
+      return;
+    }
+
+    // Update last activity
+    session.lastActivity = now;
+    sessions.set(sessionId, session);
+
+    next();
+  };
+
+  // Authentication middleware with constant-time comparison
   if (config.authToken) {
     app.use((req, res, next) => {
       // Skip auth for health check
@@ -44,17 +175,25 @@ export function createSSETransport(
         return next();
       }
 
-      const authHeader = req.headers.authorization;
-      const token = authHeader?.replace('Bearer ', '');
+      // Apply auth rate limiting
+      authLimiter(req, res, () => {
+        const authHeader = req.headers.authorization;
+        const token = authHeader?.replace('Bearer ', '');
 
-      if (token !== config.authToken) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
-      }
+        if (!token || !secureCompare(token, config.authToken!)) {
+          logger.authFailure('invalid_token', req.ip);
+          res.status(401).json({ error: 'Unauthorized' });
+          return;
+        }
 
-      next();
+        logger.authAttempt(true, req.ip, req.headers['mcp-session-id'] as string);
+        next();
+      });
     });
   }
+
+  // Session management middleware
+  app.use(validateSession);
 
   // Health check endpoint
   app.get('/health', (req: Request, res: Response) => {
@@ -67,21 +206,47 @@ export function createSSETransport(
 
   // SSE endpoint
   app.get(config.ssePath, async (req: Request, res: Response) => {
-    console.error('SSE connection established');
+    const sessionId = (req.headers['mcp-session-id'] as string) || generateSessionId();
+
+    logger.info('SSE connection established', { sessionId, ip: req.ip });
+
+    // Create or update session
+    if (!sessions.has(sessionId)) {
+      const session: Session = {
+        id: sessionId,
+        createdAt: Date.now(),
+        lastActivity: Date.now(),
+        ip: req.ip,
+      };
+      sessions.set(sessionId, session);
+      logger.sessionCreated(sessionId, req.ip);
+    }
 
     const transport = new SSEServerTransport(config.ssePath, res);
     await server.connect(transport);
 
     // Keep the connection alive with heartbeats
     const heartbeat = setInterval(() => {
-      res.write(': heartbeat\n\n');
+      try {
+        res.write(': heartbeat\n\n');
+
+        // Update session activity
+        const session = sessions.get(sessionId);
+        if (session) {
+          session.lastActivity = Date.now();
+          sessions.set(sessionId, session);
+        }
+      } catch (error) {
+        clearInterval(heartbeat);
+      }
     }, config.heartbeatInterval);
 
     // Cleanup on connection close
     req.on('close', () => {
-      console.error('SSE connection closed');
+      logger.info('SSE connection closed', { sessionId });
       clearInterval(heartbeat);
       transport.close();
+      // Don't delete session - allow reconnection within timeout period
     });
   });
 
@@ -91,19 +256,41 @@ export function createSSETransport(
       // The SSE transport handles the message routing
       res.status(200).json({ status: 'ok' });
     } catch (error) {
-      console.error('Error handling POST request:', error);
+      logger.error('Error handling POST request', { path: req.path }, error as Error);
+
+      const sanitizedMessage = sanitizeErrorMessage(error, isProduction);
+
       res.status(500).json({
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : String(error),
+        message: sanitizedMessage,
       });
     }
+  });
+
+  // Global error handler
+  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    logger.error('Unhandled error', { path: req.path, method: req.method }, err);
+
+    const sanitizedMessage = sanitizeErrorMessage(err, isProduction);
+
+    res.status(500).json({
+      error: 'Internal server error',
+      message: sanitizedMessage,
+    });
   });
 
   return app;
 }
 
 /**
- * Start the SSE server
+ * Generate a unique session ID
+ */
+function generateSessionId(): string {
+  return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+}
+
+/**
+ * Start the SSE server with optional HTTPS support
  */
 export async function initializeSSETransport(
   server: Server,
@@ -111,12 +298,59 @@ export async function initializeSSETransport(
 ): Promise<void> {
   const app = createSSETransport(server, config);
 
-  return new Promise((resolve) => {
-    app.listen(config.port, config.host, () => {
-      console.error(`Hevy MCP Server running on http://${config.host}:${config.port}`);
-      console.error(`SSE endpoint: http://${config.host}:${config.port}${config.ssePath}`);
-      console.error(`Health check: http://${config.host}:${config.port}/health`);
-      resolve();
-    });
+  return new Promise((resolve, reject) => {
+    try {
+      let httpServer;
+
+      if (config.enableHttps && config.httpsKeyPath && config.httpsCertPath) {
+        // HTTPS server
+        const options = {
+          key: readFileSync(config.httpsKeyPath),
+          cert: readFileSync(config.httpsCertPath),
+        };
+
+        httpServer = createHttpsServer(options, app);
+        logger.info('Starting HTTPS server', {
+          host: config.host,
+          port: config.port
+        });
+      } else {
+        // HTTP server
+        httpServer = createHttpServer(app);
+        logger.info('Starting HTTP server', {
+          host: config.host,
+          port: config.port
+        });
+
+        if (process.env.NODE_ENV === 'production') {
+          logger.warn('Running without HTTPS in production - not recommended!');
+        }
+      }
+
+      httpServer.listen(config.port, config.host, () => {
+        const protocol = config.enableHttps ? 'https' : 'http';
+        logger.info('Hevy MCP Server started', {
+          protocol,
+          host: config.host,
+          port: config.port,
+          ssePath: config.ssePath,
+        });
+
+        console.error(`Hevy MCP Server running on ${protocol}://${config.host}:${config.port}`);
+        console.error(`SSE endpoint: ${protocol}://${config.host}:${config.port}${config.ssePath}`);
+        console.error(`Health check: ${protocol}://${config.host}:${config.port}/health`);
+
+        resolve();
+      });
+
+      httpServer.on('error', (error) => {
+        logger.error('Server error', {}, error);
+        reject(error);
+      });
+
+    } catch (error) {
+      logger.error('Failed to start server', {}, error as Error);
+      reject(error);
+    }
   });
 }

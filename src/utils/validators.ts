@@ -1,4 +1,14 @@
 import { z } from 'zod';
+import { sanitizeText } from './security.js';
+
+// Sanitized string schema helper that also validates length
+const sanitizedString = (maxLength: number = 10000, minLength: number = 0) => {
+  let schema = z.string();
+  if (minLength > 0) {
+    schema = schema.min(minLength);
+  }
+  return schema.max(maxLength).transform((val) => sanitizeText(val, maxLength));
+};
 
 // Exercise Set Schema
 export const ExerciseSetSchema = z.object({
@@ -14,14 +24,14 @@ export const ExerciseSetSchema = z.object({
 export const WorkoutExerciseSchema = z.object({
   exercise_template_id: z.string(),
   superset_id: z.string().optional().nullable(),
-  notes: z.string().optional(),
+  notes: sanitizedString(5000).optional(),
   sets: z.array(ExerciseSetSchema),
 });
 
 // Create Workout Input Schema
 export const CreateWorkoutInputSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
+  title: sanitizedString(200, 1),
+  description: sanitizedString(5000).optional(),
   start_time: z.string().datetime(),
   end_time: z.string().datetime(),
   exercises: z.array(WorkoutExerciseSchema),
@@ -29,8 +39,8 @@ export const CreateWorkoutInputSchema = z.object({
 
 // Update Workout Input Schema
 export const UpdateWorkoutInputSchema = z.object({
-  title: z.string().min(1).optional(),
-  description: z.string().optional(),
+  title: sanitizedString(200, 1).optional(),
+  description: sanitizedString(5000).optional(),
   start_time: z.string().datetime().optional(),
   end_time: z.string().datetime().optional(),
   exercises: z.array(WorkoutExerciseSchema).optional(),
@@ -40,27 +50,27 @@ export const UpdateWorkoutInputSchema = z.object({
 export const RoutineExerciseSchema = z.object({
   exercise_template_id: z.string(),
   superset_id: z.string().optional().nullable(),
-  notes: z.string().optional(),
+  notes: sanitizedString(5000).optional(),
   sets: z.array(ExerciseSetSchema),
 });
 
 // Create Routine Input Schema
 export const CreateRoutineInputSchema = z.object({
-  title: z.string().min(1),
+  title: sanitizedString(200, 1),
   folder_id: z.string().optional(),
   exercises: z.array(RoutineExerciseSchema),
 });
 
 // Update Routine Input Schema
 export const UpdateRoutineInputSchema = z.object({
-  title: z.string().min(1).optional(),
+  title: sanitizedString(200, 1).optional(),
   folder_id: z.string().optional(),
   exercises: z.array(RoutineExerciseSchema).optional(),
 });
 
 // Create Folder Input Schema
 export const CreateFolderInputSchema = z.object({
-  title: z.string().min(1),
+  title: sanitizedString(200, 1),
 });
 
 // Pagination Params Schema
