@@ -1,10 +1,18 @@
 import { Workout, ExerciseTemplate, Routine, ExerciseSet } from '../hevy/types.js';
 
+// Capitalize first letter of each word in a title
+function capitalizeTitle(title: string): string {
+  return title
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
 // Format workout for display
 export function formatWorkout(workout: Workout): string {
   const lines: string[] = [];
 
-  lines.push(`# ${workout.title}`);
+  lines.push(`# ${capitalizeTitle(workout.title)}`);
   if (workout.description) {
     lines.push(`${workout.description}`);
   }
@@ -69,7 +77,7 @@ export function formatSet(set: ExerciseSet): string {
 export function formatRoutine(routine: Routine): string {
   const lines: string[] = [];
 
-  lines.push(`# ${routine.title}`);
+  lines.push(`# ${capitalizeTitle(routine.title)}`);
   if (routine.folder_id) {
     lines.push(`**Folder ID:** ${routine.folder_id}`);
   }
@@ -160,7 +168,7 @@ export function formatWorkoutList(workouts: Workout[]): string {
   const lines: string[] = [`Found ${workouts.length} workout(s):\n`];
 
   workouts.forEach((workout, idx) => {
-    lines.push(`${idx + 1}. **${workout.title}**`);
+    lines.push(`${idx + 1}. **${capitalizeTitle(workout.title)}**`);
     lines.push(`   ID: ${workout.id}`);
     lines.push(`   Date: ${formatDateTime(workout.start_time)}`);
     lines.push(`   Exercises: ${workout.exercises.length}`);
@@ -179,7 +187,7 @@ export function formatRoutineList(routines: Routine[]): string {
   const lines: string[] = [`Found ${routines.length} routine(s):\n`];
 
   routines.forEach((routine, idx) => {
-    lines.push(`${idx + 1}. **${routine.title}**`);
+    lines.push(`${idx + 1}. **${capitalizeTitle(routine.title)}**`);
     lines.push(`   ID: ${routine.id}`);
     lines.push(`   Exercises: ${routine.exercises.length}`);
     lines.push('');
