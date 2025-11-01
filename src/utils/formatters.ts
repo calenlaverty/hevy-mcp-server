@@ -1,7 +1,12 @@
 import { Workout, ExerciseTemplate, Routine, ExerciseSet } from '../hevy/types.js';
 
 // Capitalize first letter of each word in a title
-function capitalizeTitle(title: string): string {
+function capitalizeTitle(title: string | undefined | null): string {
+  // Defensive check: return empty string if title is missing
+  if (!title) {
+    return '';
+  }
+
   return title
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -12,7 +17,8 @@ function capitalizeTitle(title: string): string {
 export function formatWorkout(workout: Workout): string {
   const lines: string[] = [];
 
-  lines.push(`# ${capitalizeTitle(workout.title)}`);
+  const title = capitalizeTitle(workout.title) || 'Untitled Workout';
+  lines.push(`# ${title}`);
   if (workout.description) {
     lines.push(`${workout.description}`);
   }
@@ -77,7 +83,8 @@ export function formatSet(set: ExerciseSet): string {
 export function formatRoutine(routine: Routine): string {
   const lines: string[] = [];
 
-  lines.push(`# ${capitalizeTitle(routine.title)}`);
+  const title = capitalizeTitle(routine.title) || 'Untitled Routine';
+  lines.push(`# ${title}`);
   if (routine.folder_id) {
     lines.push(`**Folder ID:** ${routine.folder_id}`);
   }
