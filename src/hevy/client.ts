@@ -133,17 +133,21 @@ export class HevyClient {
   }
 
   async createWorkout(data: CreateWorkoutInput): Promise<Workout> {
-    return this.request<Workout>('/v1/workouts', {
+    const response = await this.request<{ workout: Workout[] }>('/v1/workouts', {
       method: 'POST',
       body: JSON.stringify({ workout: this.cleanPayload(data) }),
     });
+    // API returns { workout: [{ ... }] }, extract first element
+    return response.workout[0];
   }
 
   async updateWorkout(id: string, data: UpdateWorkoutInput): Promise<Workout> {
-    return this.request<Workout>(`/v1/workouts/${encodeURIComponent(id)}`, {
+    const response = await this.request<{ workout: Workout[] }>(`/v1/workouts/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify({ workout: this.cleanPayload(data) }),
     });
+    // API returns { workout: [{ ... }] }, extract first element
+    return response.workout[0];
   }
 
   async deleteWorkout(id: string): Promise<void> {
@@ -183,17 +187,21 @@ export class HevyClient {
   }
 
   async createRoutine(data: CreateRoutineInput): Promise<Routine> {
-    return this.request<Routine>('/v1/routines', {
+    const response = await this.request<{ routine: Routine[] }>('/v1/routines', {
       method: 'POST',
       body: JSON.stringify({ routine: this.cleanPayload(data) }),
     });
+    // API returns { routine: [{ ... }] }, extract first element
+    return response.routine[0];
   }
 
   async updateRoutine(id: string, data: UpdateRoutineInput): Promise<Routine> {
-    return this.request<Routine>(`/v1/routines/${encodeURIComponent(id)}`, {
+    const response = await this.request<{ routine: Routine[] }>(`/v1/routines/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify({ routine: this.cleanPayload(data) }),
     });
+    // API returns { routine: [{ ... }] }, extract first element
+    return response.routine[0];
   }
 
   async deleteRoutine(id: string): Promise<void> {
@@ -259,17 +267,21 @@ export class HevyClient {
   }
 
   async createRoutineFolder(data: CreateFolderInput): Promise<RoutineFolder> {
-    return this.request<RoutineFolder>('/v1/routine_folders', {
+    const response = await this.request<{ folder: RoutineFolder[] }>('/v1/routine_folders', {
       method: 'POST',
       body: JSON.stringify({ folder: this.cleanPayload(data) }),
     });
+    // API returns { folder: [{ ... }] }, extract first element
+    return response.folder[0];
   }
 
   async updateRoutineFolder(id: string, data: CreateFolderInput): Promise<RoutineFolder> {
-    return this.request<RoutineFolder>(`/v1/routine_folders/${encodeURIComponent(id)}`, {
+    const response = await this.request<{ folder: RoutineFolder[] }>(`/v1/routine_folders/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify({ folder: this.cleanPayload(data) }),
     });
+    // API returns { folder: [{ ... }] }, extract first element
+    return response.folder[0];
   }
 
   async deleteRoutineFolder(id: string): Promise<void> {
@@ -293,10 +305,12 @@ export class HevyClient {
   }
 
   async createWebhookSubscription(data: CreateWebhookInput): Promise<WebhookSubscription> {
-    return this.request<WebhookSubscription>('/v1/webhooks/subscription', {
+    const response = await this.request<{ webhook: WebhookSubscription[] }>('/v1/webhooks/subscription', {
       method: 'POST',
       body: JSON.stringify({ webhook: this.cleanPayload(data) }),
     });
+    // API returns { webhook: [{ ... }] }, extract first element
+    return response.webhook[0];
   }
 
   async deleteWebhookSubscription(): Promise<void> {
