@@ -51,7 +51,7 @@ Click the button above to deploy your own instance to Railway. See the [Railway 
 ### 1. Clone and Install Dependencies
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/meimakes/hevy-mcp-server
 cd hevy-mcp-server
 npm install
 ```

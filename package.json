@@ -20,6 +20,14 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meimakes/hevy-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/meimakes/hevy-mcp-server/issues"
+  },
+  "homepage": "https://github.com/meimakes/hevy-mcp-server#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "dotenv": "^16.0.0",
