@@ -1,16 +1,21 @@
 import { z } from 'zod';
 import { sanitizeText } from './security.js';
 
-// Helper to convert string "undefined", "null", empty strings to undefined
-// This ensures MCP clients sending "undefined" as a string get it converted properly
+// Helper to convert string "undefined", "null", empty strings to null
+// The Hevy API expects null (not undefined or omission) for optional fields like folder_id
 const optionalString = () => {
   return z
-    .union([z.string(), z.undefined()])
+    .union([z.string(), z.null(), z.undefined()])
     .optional()
+    .nullable()
     .transform((val) => {
-      // Convert string "undefined", "null", or empty string to undefined
-      if (val === 'undefined' || val === 'null' || val === '') {
-        return undefined;
+      // Convert string "undefined", "null", or empty string to null
+      // The Hevy API expects null for "no folder" rather than omitting the field
+      if (val === 'undefined' || val === '' || val === undefined) {
+        return null;
+      }
+      if (val === 'null') {
+        return null;
       }
       return val;
     });

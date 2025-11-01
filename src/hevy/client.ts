@@ -30,13 +30,14 @@ export class HevyClient {
   }
 
   /**
-   * Remove undefined and null values from an object
-   * This prevents sending "undefined" as a string to the API
+   * Clean payload by removing only undefined values
+   * Keeps null values as they are semantically meaningful to the API
+   * (e.g., folder_id: null means "no folder")
    */
   private cleanPayload<T extends Record<string, any>>(obj: T): Partial<T> {
     const cleaned: any = {};
     for (const [key, value] of Object.entries(obj)) {
-      if (value !== undefined && value !== null) {
+      if (value !== undefined) {
         cleaned[key] = value;
       }
     }

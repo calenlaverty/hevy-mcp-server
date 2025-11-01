@@ -88,13 +88,13 @@ export interface RoutineSet {
 
 export interface CreateRoutineInput {
   title: string;
-  folder_id?: string;
+  folder_id?: string | null;
   exercises: RoutineExercise[];
 }
 
 export interface UpdateRoutineInput {
   title?: string;
-  folder_id?: string;
+  folder_id?: string | null;
   exercises?: RoutineExercise[];
 }
 
