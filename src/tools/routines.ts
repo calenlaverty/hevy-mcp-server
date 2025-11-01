@@ -240,14 +240,45 @@ export async function handleRoutineToolCall(request: any, client: HevyClient) {
           }
 
           const routine = await client.createRoutine(validation.data);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `✅ Routine created successfully!\n\n${formatRoutine(routine)}`,
-              },
-            ],
-          };
+
+          // Log the API response for debugging
+          console.error('API Response:', JSON.stringify(routine, null, 2));
+
+          // Defensive check: ensure routine object is valid
+          if (!routine || typeof routine !== 'object') {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error: API returned invalid routine data: ${JSON.stringify(routine)}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          try {
+            const formattedRoutine = formatRoutine(routine);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `✅ Routine created successfully!\n\n${formattedRoutine}`,
+                },
+              ],
+            };
+          } catch (formatError) {
+            console.error('Format error:', formatError);
+            // Return basic info if formatting fails
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `✅ Routine created successfully!\nID: ${routine.id || 'unknown'}\nTitle: ${routine.title || 'No title'}\nRaw data: ${JSON.stringify(routine, null, 2)}`,
+                },
+              ],
+            };
+          }
         }
 
         case 'update-routine': {
