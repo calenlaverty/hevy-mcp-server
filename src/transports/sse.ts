@@ -186,7 +186,8 @@ export function createSSETransport(
           headers: JSON.stringify(req.headers),
           path: req.path,
           method: req.method,
-          ip: req.ip
+          ip: req.ip,
+          query: JSON.stringify(req.query)
         });
 
         // Try multiple token extraction methods for compatibility with different clients
@@ -199,7 +200,23 @@ export function createSSETransport(
           token = authHeader.replace(/^Bearer\s+/i, '');
         }
 
-        // Method 2: Check for token in various custom headers that Claude might use
+        // Method 2: OAuth-related headers (Claude.ai "OAuth Client Secret" field)
+        if (!token && req.headers['client-secret']) {
+          logger.info('Found token in client-secret header');
+          token = req.headers['client-secret'] as string;
+        }
+
+        if (!token && req.headers['x-client-secret']) {
+          logger.info('Found token in x-client-secret header');
+          token = req.headers['x-client-secret'] as string;
+        }
+
+        if (!token && req.headers['oauth-client-secret']) {
+          logger.info('Found token in oauth-client-secret header');
+          token = req.headers['oauth-client-secret'] as string;
+        }
+
+        // Method 3: Check for token in various custom headers
         if (!token && req.headers['x-api-key']) {
           logger.info('Found token in X-API-Key header');
           token = req.headers['x-api-key'] as string;
@@ -210,14 +227,23 @@ export function createSSETransport(
           token = req.headers['api-key'] as string;
         }
 
-        // Method 3: Check query parameters (less secure but useful for debugging)
+        // Method 4: Check query parameters (less secure but useful for debugging)
         if (!token && req.query.token) {
           logger.info('Found token in query parameter');
           token = req.query.token as string;
         }
 
+        if (!token && req.query.auth) {
+          logger.info('Found token in auth query parameter');
+          token = req.query.auth as string;
+        }
+
         if (!token) {
           logger.authFailure('no_token_found', req.ip);
+          logger.info('No token found in any expected location. All headers:', {
+            headerKeys: Object.keys(req.headers),
+            queryKeys: Object.keys(req.query)
+          });
           res.status(401).json({
             error: 'Unauthorized',
             message: 'No authentication token found. Expected in Authorization header (Bearer token), X-API-Key header, or API-Key header.'
