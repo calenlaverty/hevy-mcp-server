@@ -181,16 +181,68 @@ export function createSSETransport(
 
       // Apply auth rate limiting
       authLimiter(req, res, () => {
-        const authHeader = req.headers.authorization;
-        const token = authHeader?.replace('Bearer ', '');
+        // Log all incoming headers for debugging
+        logger.info('Auth attempt - all headers:', {
+          headers: JSON.stringify(req.headers),
+          path: req.path,
+          method: req.method,
+          ip: req.ip
+        });
 
-        if (!token || !secureCompare(token, config.authToken!)) {
+        // Try multiple token extraction methods for compatibility with different clients
+        let token: string | undefined;
+
+        // Method 1: Standard Authorization header with Bearer prefix
+        const authHeader = req.headers.authorization;
+        if (authHeader) {
+          logger.info('Authorization header found:', { authHeader });
+          token = authHeader.replace(/^Bearer\s+/i, '');
+        }
+
+        // Method 2: Check for token in various custom headers that Claude might use
+        if (!token && req.headers['x-api-key']) {
+          logger.info('Found token in X-API-Key header');
+          token = req.headers['x-api-key'] as string;
+        }
+
+        if (!token && req.headers['api-key']) {
+          logger.info('Found token in API-Key header');
+          token = req.headers['api-key'] as string;
+        }
+
+        // Method 3: Check query parameters (less secure but useful for debugging)
+        if (!token && req.query.token) {
+          logger.info('Found token in query parameter');
+          token = req.query.token as string;
+        }
+
+        if (!token) {
+          logger.authFailure('no_token_found', req.ip);
+          res.status(401).json({
+            error: 'Unauthorized',
+            message: 'No authentication token found. Expected in Authorization header (Bearer token), X-API-Key header, or API-Key header.'
+          });
+          return;
+        }
+
+        logger.info('Comparing token:', {
+          tokenLength: token.length,
+          expectedLength: config.authToken!.length,
+          tokenPreview: token.substring(0, 10) + '...',
+          expectedPreview: config.authToken!.substring(0, 10) + '...'
+        });
+
+        if (!secureCompare(token, config.authToken!)) {
           logger.authFailure('invalid_token', req.ip);
-          res.status(401).json({ error: 'Unauthorized' });
+          res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Invalid authentication token'
+          });
           return;
         }
 
         logger.authAttempt(true, req.ip, req.headers['mcp-session-id'] as string);
+        logger.info('Authentication successful!');
         next();
       });
     });
