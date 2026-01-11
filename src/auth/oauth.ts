@@ -300,56 +300,67 @@ export function handleToken(authToken: string) {
 /**
  * OAuth Bearer token validation middleware
  */
-export function validateBearerToken(req: Request, res: Response, next: NextFunction) {
-  try {
-    const authHeader = req.headers.authorization;
+export function validateBearerToken(baseUrl?: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        error: 'invalid_token',
-        error_description: 'Missing or invalid Authorization header'
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // Return 401 with WWW-Authenticate header per MCP spec
+        const resourceMetadataUrl = baseUrl
+          ? `${baseUrl}/.well-known/oauth-protected-resource`
+          : '/.well-known/oauth-protected-resource';
+
+        res.setHeader(
+          'WWW-Authenticate',
+          `Bearer resource_metadata="${resourceMetadataUrl}", scope="mcp"`
+        );
+        res.status(401).json({
+          error: 'invalid_token',
+          error_description: 'Missing or invalid Authorization header'
+        });
+        return;
+      }
+
+      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      const tokenData = accessTokens.get(token);
+
+      if (!tokenData) {
+        logger.authFailure('invalid_access_token', req.ip);
+        res.status(401).json({
+          error: 'invalid_token',
+          error_description: 'Invalid or expired access token'
+        });
+        return;
+      }
+
+      // Check if token expired
+      if (Date.now() > tokenData.expiresAt) {
+        accessTokens.delete(token);
+        logger.authFailure('expired_access_token', req.ip);
+        res.status(401).json({
+          error: 'invalid_token',
+          error_description: 'Token has expired'
+        });
+        return;
+      }
+
+      logger.info('Valid access token:', {
+        clientId: tokenData.clientId,
+        scope: tokenData.scope
       });
-      return;
-    }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-    const tokenData = accessTokens.get(token);
+      // Token is valid, continue to next middleware
+      next();
 
-    if (!tokenData) {
-      logger.authFailure('invalid_access_token', req.ip);
-      res.status(401).json({
-        error: 'invalid_token',
-        error_description: 'Invalid or expired access token'
+    } catch (error) {
+      logger.error('Error validating bearer token:', {}, error as Error);
+      res.status(500).json({
+        error: 'server_error',
+        error_description: 'Internal server error'
       });
-      return;
     }
-
-    // Check if token expired
-    if (Date.now() > tokenData.expiresAt) {
-      accessTokens.delete(token);
-      logger.authFailure('expired_access_token', req.ip);
-      res.status(401).json({
-        error: 'invalid_token',
-        error_description: 'Token has expired'
-      });
-      return;
-    }
-
-    logger.info('Valid access token:', {
-      clientId: tokenData.clientId,
-      scope: tokenData.scope
-    });
-
-    // Token is valid, continue to next middleware
-    next();
-
-  } catch (error) {
-    logger.error('Error validating bearer token:', {}, error as Error);
-    res.status(500).json({
-      error: 'server_error',
-      error_description: 'Internal server error'
-    });
-  }
+  };
 }
 
 /**

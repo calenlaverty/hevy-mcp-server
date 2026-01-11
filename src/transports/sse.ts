@@ -152,11 +152,15 @@ export function createSSETransport(
   // Determine base URL for OAuth endpoints
   const protocol = config.enableHttps ? 'https' : 'http';
   const baseUrl = process.env.BASE_URL ||
-    process.env.RAILWAY_PUBLIC_DOMAIN
+    (process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : `${protocol}://${config.host}:${config.port}`;
+      : `${protocol}://${config.host}:${config.port}`);
 
-  logger.info('OAuth base URL:', { baseUrl });
+  logger.info('OAuth base URL:', {
+    baseUrl,
+    RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN,
+    BASE_URL: process.env.BASE_URL
+  });
 
   // OAuth 2.1 Authorization Server Metadata (RFC 8414)
   // Must be accessible without authentication
@@ -218,7 +222,7 @@ export function createSSETransport(
     }
 
     // For MCP endpoints, require OAuth bearer token
-    validateBearerToken(req, res, next);
+    validateBearerToken(baseUrl)(req, res, next);
   });
 
   // Session management middleware
