@@ -14,6 +14,8 @@ async function main() {
     // Get configuration from environment variables
     const apiKey = process.env.HEVY_API_KEY;
     const apiBaseUrl = process.env.HEVY_API_BASE_URL;
+    const haBaseUrl = process.env.HA_BASE_URL;
+    const haToken = process.env.HA_TOKEN;
     const transport = process.env.TRANSPORT || 'stdio';
     const port = parseInt(process.env.PORT || '3000', 10);
     // Use 0.0.0.0 for Railway/production, 127.0.0.1 for local development
@@ -36,13 +38,20 @@ async function main() {
       );
     }
 
-    console.error('Initializing Hevy MCP Server...');
+    console.error('Initializing Hevy + Home Assistant MCP Server...');
     console.error(`Transport mode: ${transport}`);
+    if (haBaseUrl && haToken) {
+      console.error('Home Assistant integration: enabled');
+    } else {
+      console.error('Home Assistant integration: disabled (set HA_BASE_URL and HA_TOKEN to enable)');
+    }
 
     // Create the MCP server
     const server = createHevyMCPServer({
       apiKey,
       apiBaseUrl,
+      haBaseUrl,
+      haToken,
     });
 
     // Initialize transport(s) based on configuration
@@ -72,9 +81,9 @@ async function main() {
       );
     }
 
-    console.error('Hevy MCP Server initialized successfully!');
+    console.error('Hevy + Home Assistant MCP Server initialized successfully!');
   } catch (error) {
-    console.error('Failed to start Hevy MCP Server:');
+    console.error('Failed to start Hevy + Home Assistant MCP Server:');
     if (error instanceof ConfigurationError) {
       console.error(`Configuration Error: ${error.message}`);
     } else if (error instanceof Error) {
@@ -89,12 +98,12 @@ async function main() {
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {
-  console.error('\nShutting down Hevy MCP Server...');
+  console.error('\nShutting down Hevy + Home Assistant MCP Server...');
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.error('\nShutting down Hevy MCP Server...');
+  console.error('\nShutting down Hevy + Home Assistant MCP Server...');
   process.exit(0);
 });
 

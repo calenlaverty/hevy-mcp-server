@@ -1,7 +1,7 @@
 {
-  "name": "hevy-mcp-server",
+  "name": "hevy-ha-mcp-server",
   "version": "1.0.0",
-  "description": "MCP server for Hevy workout tracking API with dual transport support (stdio + SSE)",
+  "description": "Unified MCP server for Hevy workout tracking and Home Assistant with dual transport support (stdio + SSE)",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -14,20 +14,22 @@
   "keywords": [
     "mcp",
     "hevy",
+    "home-assistant",
     "workout",
     "fitness",
+    "smart-home",
     "api"
   ],
   "author": "",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/meimakes/hevy-mcp-server.git"
+    "url": "https://github.com/calenlaverty/hevy-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/meimakes/hevy-mcp-server/issues"
+    "url": "https://github.com/calenlaverty/hevy-mcp-server/issues"
   },
-  "homepage": "https://github.com/meimakes/hevy-mcp-server#readme",
+  "homepage": "https://github.com/calenlaverty/hevy-mcp-server#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "dotenv": "^16.0.0",
